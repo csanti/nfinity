@@ -37,10 +37,12 @@ func (n *Nfinity) SetConfig(c *Config) {
 	n.node = NewNodeProcess(n.context, c, n.broadcast)
 }
 
-func (d *Dfinity) AttachCallback(fn func(int)) {
+/*
+func (n *Nfinity) AttachCallback(fn func(int)) {
 	chain := new(Chain)
-	d.fin = NewFinalizer(d.c, chain, fn)
+	n.fin = NewFinalizer(d.c, chain, fn)
 }
+*/
 
 func (n *Nfinity) Start() {
 	// send a bootstrap message
@@ -56,20 +58,21 @@ func (n *Nfinity) Process(e *network.Envelope) {
 	switch inner := e.Msg.(type) {
 	case *Config:
 		n.SetConfig(inner)
-  case *Bootstrap:
-    n.Process(inner)
-  case *BlockProposal
-    n.Process(inner)
+	case *Bootstrap:
+		n.Process(e)
+	case *BlockProposal:
+		n.Process(e)
+	}
 }
 
 type BroadcastFn func(sis []*network.ServerIdentity, msg interface{})
 
 func (n *Nfinity) broadcast(sis []*network.ServerIdentity, msg interface{}) {
 	for _, si := range sis {
-		if d.ServerIdentity().Equal(si) {
+		if n.ServerIdentity().Equal(si) {
 			continue
 		}
-		if err := d.ServiceProcessor.SendRaw(si, msg); err != nil {
+		if err := n.ServiceProcessor.SendRaw(si, msg); err != nil {
 			panic(err)
 		}
 	}
