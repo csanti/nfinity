@@ -3,6 +3,7 @@ package service
 import (
 	"go.dedis.ch/kyber/pairing/bn256"
 	"go.dedis.ch/onet"
+	"go.dedis.ch/onet/log"
 	"go.dedis.ch/onet/network"
 )
 
@@ -24,12 +25,13 @@ type Nfinity struct {
 
 // NewDfinityService
 func NewNfinityService(c *onet.Context) (onet.Service, error) {
-	d := &Nfinity{
+	n := &Nfinity{
 		context:          c,
 		ServiceProcessor: onet.NewServiceProcessor(c),
 	}
-	c.RegisterProcessor(d, ConfigType)
-	return d, nil
+	c.RegisterProcessor(n, ConfigType)
+	c.RegisterProcessor(n, BootstrapType)
+	return n, nil
 }
 
 func (n *Nfinity) SetConfig(c *Config) {
@@ -37,12 +39,11 @@ func (n *Nfinity) SetConfig(c *Config) {
 	n.node = NewNodeProcess(n.context, c, n.broadcast)
 }
 
-/*
+
 func (n *Nfinity) AttachCallback(fn func(int)) {
-	chain := new(Chain)
-	n.fin = NewFinalizer(d.c, chain, fn)
+	// attach to something.. haha lol xd
 }
-*/
+
 
 func (n *Nfinity) Start() {
 	// send a bootstrap message
@@ -59,9 +60,9 @@ func (n *Nfinity) Process(e *network.Envelope) {
 	case *Config:
 		n.SetConfig(inner)
 	case *Bootstrap:
-		n.Process(e)
+		n.node.Process(e)
 	case *BlockProposal:
-		n.Process(e)
+		//n.Process(e)
 	}
 }
 
@@ -72,8 +73,10 @@ func (n *Nfinity) broadcast(sis []*network.ServerIdentity, msg interface{}) {
 		if n.ServerIdentity().Equal(si) {
 			continue
 		}
+		log.Lvlf3("Broadcasting from: %s to: %s",n.ServerIdentity(), si)
 		if err := n.ServiceProcessor.SendRaw(si, msg); err != nil {
-			panic(err)
+			log.Lvl1("Error sending message")
+			//panic(err)
 		}
 	}
 }

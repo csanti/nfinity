@@ -33,7 +33,7 @@ type Node struct {
 	// for firsts tests
 	receivedBlockProposals map[int]*BlockProposal
 
-	b BroadcastFn
+	broadcast BroadcastFn
 }
 
 func NewNodeProcess(c *onet.Context, conf *Config, b BroadcastFn) *Node {
@@ -41,26 +41,25 @@ func NewNodeProcess(c *onet.Context, conf *Config, b BroadcastFn) *Node {
 	chain := new(BlockChain)
 	n := &Node {
 		ServiceProcessor: onet.NewServiceProcessor(c),
+		Cond: sync.NewCond(new(sync.Mutex)),
 		chain: chain,
 		c:     conf,
     	receivedBlockProposals: make(map[int]*BlockProposal),
-    	b: b,
+    	broadcast: b,
 	}
 	return n
 }
 
 func (n *Node) StartConsensus() {
-
-	log.Lvl1("Sending bootstrap message...")
+	log.Lvl1("Staring consensus")
 	n.isGenesis = true
-	/*
 	packet := &Bootstrap{
 		Block: GenesisBlock,
 		Seed:  1234,
 	}
-	*/
-	// send bootstrap to all nodes
-	log.Lvl1("Consensus started")
+	log.Lvl2("Starting consensus, sending bootstrap..")
+	// send bootstrap message to all nodes
+	go n.broadcast(n.c.Roster.List, packet)
 }
 
 func (n *Node) Process(e *network.Envelope) {
@@ -68,15 +67,20 @@ func (n *Node) Process(e *network.Envelope) {
 	defer n.Cond.L.Unlock()
 	defer n.Cond.Broadcast()
 	switch inner := e.Msg.(type) {
-	case *BlockProposal:
-		n.NewBlockProposal(inner)
+		case *BlockProposal:
+			n.NewBlockProposal(inner)
+		case *Bootstrap:
+			log.Lvl2("Received Bootstrap")
+			n.NewRound(0)
+		default:
+			log.Lvl1("Received unidentified message")
 	}
 }
 
 func (n *Node) NewRound(round int) {
 	// TODO: cleanup
-
-	go n.roundLoop(round)
+	
+	//go n.roundLoop(round)
 }
 
 func (n *Node) NewBlockProposal(p *BlockProposal) {
