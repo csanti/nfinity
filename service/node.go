@@ -3,6 +3,8 @@ package service
 import (
 	"sync"
 	//"time"
+	"encoding/binary"
+	"encoding/hex"
 
 	"go.dedis.ch/onet"
 	"go.dedis.ch/onet/log"
@@ -60,6 +62,7 @@ func (n *Node) StartConsensus() {
 	log.Lvl2("Starting consensus, sending bootstrap..")
 	// send bootstrap message to all nodes
 	go n.broadcast(n.c.Roster.List, packet)
+	n.NewRound(0)
 }
 
 func (n *Node) Process(e *network.Envelope) {
@@ -77,9 +80,25 @@ func (n *Node) Process(e *network.Envelope) {
 	}
 }
 
-func (n *Node) NewRound(round int) {
+func (n *Node) NewRound(round uint32) {
 	// TODO: cleanup
 	
+	// generate round randomness (sha256 - 32 bytes size)
+	rand := n.generateRoundRandomness(round) // should change... seed should be based on prev block sign
+	log.Lvlf2("%d - Round randomness: %s",n.c.Index, hex.EncodeToString(rand))
+	// pick block proposer
+	proposerPosition := n.pickBlockProposer(binary.BigEndian.Uint32(rand), n.c.N)
+	log.Lvlf2("Block proposer picked - position %d of %d", proposerPosition, n.c.N)
+	
+	if (proposerPosition == uint32(n.c.Index)) {
+		log.Lvlf1("%d - I am block proposer for round %d !", n.c.Index, round)
+	} else {
+		return
+	}
+
+	// generate block proposal and send
+
+	// start round loop which will periodically check round end conditions
 	//go n.roundLoop(round)
 }
 
@@ -112,4 +131,19 @@ func (n *Node) roundLoop(round int) {
 	// wait on new inputs
 	n.Cond.Wait()
 
+	// check round finish conditions
+		//append block to finalized blockchain
+
+}
+
+// generates round randomness as a byte array based on a given seed
+func (n *Node) generateRoundRandomness(seed uint32) []byte {
+	rHash := Suite.Hash()
+	binary.Write(rHash, binary.BigEndian, uint32(seed + 1)) //TODO for testing... must change
+	buff := rHash.Sum(nil)
+	return buff
+} 
+
+func (n *Node) pickBlockProposer(randomness uint32, listSize int) uint32 {
+	return randomness % uint32(listSize)
 }

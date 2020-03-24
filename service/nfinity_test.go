@@ -34,6 +34,8 @@ func TestDfinity(t *testing.T) {
 	for i := 0; i < n; i++ {
 		c := &Config {
 			Roster: roster,
+			Index: i,
+			N: n,
 		}
 		nfinities[i] = servers[i].Service(Name).(*Nfinity)
 		nfinities[i].SetConfig(c)
