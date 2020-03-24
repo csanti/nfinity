@@ -1,7 +1,6 @@
 package service
 
 import (
-	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"sync"
@@ -19,9 +18,10 @@ type BlockHeader struct {
 	Round      int    // round of the block
 	Owner      int    // index of the owner of the block
 	Root       string // hash of the data
-	Randomness int64  // randomness of the round
+	Randomness uint32  // randomness of the round
 	PrvHash    string // hash of the previous block
 	PrvSig     []byte // signature of the previous block (i.e. notarization)
+	Signature  []byte
 }
 
 // Block represents how a block is stored locally
@@ -71,14 +71,8 @@ func (h *BlockHeader) Hash() string {
 	return hex.EncodeToString(buff)
 }
 
-func rootHash(data []byte) string {
-	h := sha256.New()
-	h.Write(data)
-	return hex.EncodeToString(h.Sum(nil))
-}
-
 // GenesisBlock is the first block of the chain
-var GenesisBlock = &Block{
+var GenesisBlock = Block{
 	BlockHeader: BlockHeader{
 		Round: 0,
 		Owner: -1,
@@ -87,6 +81,7 @@ var GenesisBlock = &Block{
 		PrvHash: "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447",
 		// echo "hello world" | sha256sum | sha256sum
 		PrvSig: []byte("3605ff73b6faec27aa78e311603e9fe2ef35bad82ccf46fc707814bfbdcc6f9e"),
+		Signature: []byte("6585ff73b6faec27aa78e311603e9fe2ef35bad82ccf46fc707814bfbdcc6f9e"),
 	},
 	Blob: []byte("Hello Genesis"),
 }

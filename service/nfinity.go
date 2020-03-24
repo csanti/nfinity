@@ -32,6 +32,7 @@ func NewNfinityService(c *onet.Context) (onet.Service, error) {
 	}
 	c.RegisterProcessor(n, ConfigType)
 	c.RegisterProcessor(n, BootstrapType)
+	c.RegisterProcessor(n, BlockProposalType)
 	return n, nil
 }
 
@@ -67,7 +68,7 @@ func (n *Nfinity) Process(e *network.Envelope) {
 	case *Bootstrap:
 		n.node.Process(e)
 	case *BlockProposal:
-		//n.Process(e)
+		n.node.Process(e)
 	}
 }
 

@@ -13,7 +13,7 @@ func init() {
 }
 
 type BlockProposal struct {
-	*Block
+	Block
 	Count int // count of parital signatures in the array
 	Signatures []PartialSignature // Partial signature from the signer
 }
@@ -23,6 +23,6 @@ type PartialSignature struct {
 }
 
 type Bootstrap struct {
-	*Block
+	Block
 	Seed int
 }

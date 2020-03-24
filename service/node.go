@@ -2,6 +2,8 @@ package service
 
 import (
 	"sync"
+	"crypto/rand"
+	"crypto/sha256"
 	//"time"
 	"encoding/binary"
 	"encoding/hex"
@@ -66,7 +68,7 @@ func (n *Node) StartConsensus() {
 	log.Lvl2("Starting consensus, sending bootstrap..")
 	// send bootstrap message to all nodes
 	go n.broadcast(n.c.Roster.List, packet)
-	n.NewRound(0)
+	n.ReceivedBootstrap(packet)
 }
 
 func (n *Node) Process(e *network.Envelope) {
@@ -75,21 +77,20 @@ func (n *Node) Process(e *network.Envelope) {
 	defer n.Cond.Broadcast()
 	switch inner := e.Msg.(type) {
 		case *BlockProposal:
-			n.NewBlockProposal(inner)
-		case *Bootstrap:
-			log.Lvl2("Received Bootstrap")
-			n.NewRound(0)
+			n.ReceivedBlockProposal(inner)
+		case *Bootstrap:			
+			n.ReceivedBootstrap(inner)			
 		default:
 			log.Lvl1("Received unidentified message")
 	}
 }
 
-func (n *Node) NewRound(round uint32) {
+func (n *Node) NewRound(round int) {
 	// generate round randomness (sha256 - 32 bytes size)
-	rand := n.generateRoundRandomness(round) // should change... seed should be based on prev block sign
-	log.Lvlf2("%d - Round randomness: %s",n.c.Index, hex.EncodeToString(rand))
+	roundRandomness := n.generateRoundRandomness(uint32(round)) // should change... seed should be based on prev block sign
+	log.Lvlf2("%d - Round randomness: %s",n.c.Index, hex.EncodeToString(roundRandomness))
 	// pick block proposer
-	proposerPosition := n.pickBlockProposer(binary.BigEndian.Uint32(rand), n.c.N)
+	proposerPosition := n.pickBlockProposer(binary.BigEndian.Uint32(roundRandomness), n.c.N)
 	log.Lvlf2("Block proposer picked - position %d of %d", proposerPosition, n.c.N)
 	
 	if (proposerPosition == uint32(n.c.Index)) {
@@ -99,44 +100,50 @@ func (n *Node) NewRound(round uint32) {
 	}
 
 	// generate block proposal
+	
+	//b.Cond.L.Lock()
+	//defer b.Cond.L.Unlock()
 	/*
-	b.Cond.L.Lock()
-	defer b.Cond.L.Unlock()
 	for b.fin.HighestRound() < p.Round-1 {
 		log.Lvl1("blockmaker: waiting highest round go to ", p.Round-1)
 		b.Cond.Wait()
-	}
-	newRound := p.Round
-	oldBlock, err := b.fin.HighestChainHead(newRound - 1)
-	if err != nil {
-		fmt.Println(b.fin.notarized)
-		panic(err)
-	}
-	//blob := []byte(fmt.Sprintf("block data round %d owner %d", p.Round, b.c.Index))
-	blob := make([]byte, b.c.BlockSize)
+	} */
+
+	oldBlock := n.chain.Head()
+	blob := make([]byte, n.c.BlockSize)
 	rand.Read(blob)
 
 	hash := rootHash(blob)
-	header := BlockHeader{
-		Round:      newRound,
-		Owner:      b.c.Index - b.c.BeaconNb,
+	header := BlockHeader {
+		Round:      round,
+		Owner:      n.c.Index,
 		Root:       hash,
-		Randomness: p.Randomness,
-		PrvHash:    oldBlock.Block.BlockHeader.Hash(),
-		PrvSig:     oldBlock.Notarization.Signature,
+		Randomness: binary.BigEndian.Uint32(roundRandomness),
+		PrvHash:    oldBlock.BlockHeader.Hash(),
+		PrvSig:     oldBlock.BlockHeader.Signature,
 	}
-	blockProposal := &BlockProposal{
+	blockProposal := Block {
 		BlockHeader: header,
 		Blob:        blob,
 	}
-	*/
-
+	packet := &BlockProposal {
+		Block: blockProposal,
+		// need to add the proposer signature to the array
+	}
+	log.Lvlf2("Broadcasting block proposal for round %d", round)
+	go n.broadcast(n.c.Roster.List, packet)
+	n.ReceivedBlockProposal(packet)
 	// start round loop which will periodically check round end conditions
 	//go n.roundLoop(round)
 }
 
-func (n *Node) NewBlockProposal(p *BlockProposal) {
-	log.Lvl3("Processing new block proposal")
+func (n *Node) ReceivedBlockProposal(p *BlockProposal) {
+	log.Lvl2("Processing new block proposal")
+
+	n.chain.Append(&p.Block)
+
+	//n.NewRound(p.Block.BlockHeader.Round+1)
+
 	//if p.Block.Round < n.round {
 	//	log.Lvl2("received too old block")
 	//	return
@@ -153,6 +160,14 @@ func (n *Node) NewBlockProposal(p *BlockProposal) {
 	// }
 	// n.tmpSigs[p.Round] = append(n.tmpSigs[p.Round], p.Signatures[0])
 	//n.receivedBlockProposals[p.Round]++
+}
+
+func (n *Node) ReceivedBootstrap(b *Bootstrap) {
+	log.Lvl2("Processing bootstrap message")
+
+	n.chain.Append(&b.Block)
+
+	n.NewRound(0)
 }
 
 func (n *Node) roundLoop(round int) {
@@ -179,4 +194,10 @@ func (n *Node) generateRoundRandomness(seed uint32) []byte {
 
 func (n *Node) pickBlockProposer(randomness uint32, listSize int) uint32 {
 	return randomness % uint32(listSize)
+}
+
+func rootHash(data []byte) string {
+	h := sha256.New()
+	h.Write(data)
+	return hex.EncodeToString(h.Sum(nil))
 }
