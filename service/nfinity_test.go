@@ -21,7 +21,7 @@ func newNetworkSuite() *networkSuite {
 	}
 }
 
-func TestDfinity(t *testing.T) {
+func TestNfinity(t *testing.T) {
 	log.Lvl1("Starting test")
 
 	suite := newNetworkSuite()
@@ -40,14 +40,17 @@ func TestDfinity(t *testing.T) {
 		nfinities[i] = servers[i].Service(Name).(*Nfinity)
 		nfinities[i].SetConfig(c)
 	}
+	
 	done := make(chan bool)
 	cb := func(r int) {
 		if r > 10 {
 			done <- true
 		}
 	}
+	
 	nfinities[0].AttachCallback(cb)
-	nfinities[0].Start()
+	go nfinities[0].Start()
 	<-done
-
+	log.Lvl1("finish")
+	
 }

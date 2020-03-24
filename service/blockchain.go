@@ -31,6 +31,34 @@ type Block struct {
 	Blob []byte // the actual content
 }
 
+// Appends add a new block to the head of the chain
+func (bc *BlockChain) Append(b *Block) {
+	bc.Lock()
+	defer bc.Unlock()
+	// we can not append a block that does not point to he latest block
+	if bc.length > 0 && b.BlockHeader.PrvHash != bc.last.BlockHeader.Hash() {
+		panic("that should never happen")
+	}
+	bc.last = b
+	bc.length++
+
+	bc.all = append(bc.all, b)
+}
+
+// length returns the length of the finalized chain
+func (bc *BlockChain) Length() int {
+	bc.Lock()
+	defer bc.Unlock()
+	return bc.length
+}
+
+//
+func (bc *BlockChain) Head() *Block {
+	bc.Lock()
+	defer bc.Unlock()
+	return bc.last
+}
+
 // Hash returns the hash in hexadecimal of the header
 func (h *BlockHeader) Hash() string {
 	hash := Suite.Hash()

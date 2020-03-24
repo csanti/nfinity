@@ -24,7 +24,7 @@ type Node struct {
 	// information of previous rounds
 	//rounds map[int]*RoundStorage
 	// done callback
-	done func(int) // callsback number of finalized blocks
+	callback func(int) // callsback number of finalized blocks
 	// store signatures received for current rounds
 	tmpSigs map[int]*PartialSignature
 	// store block proposals received for current rounds
@@ -50,6 +50,10 @@ func NewNodeProcess(c *onet.Context, conf *Config, b BroadcastFn) *Node {
     	broadcast: b,
 	}
 	return n
+}
+
+func (n *Node) AttachCallback(fn func(int)) {
+	n.callback = fn
 }
 
 func (n *Node) StartConsensus() {
@@ -81,8 +85,6 @@ func (n *Node) Process(e *network.Envelope) {
 }
 
 func (n *Node) NewRound(round uint32) {
-	// TODO: cleanup
-	
 	// generate round randomness (sha256 - 32 bytes size)
 	rand := n.generateRoundRandomness(round) // should change... seed should be based on prev block sign
 	log.Lvlf2("%d - Round randomness: %s",n.c.Index, hex.EncodeToString(rand))
@@ -96,7 +98,38 @@ func (n *Node) NewRound(round uint32) {
 		return
 	}
 
-	// generate block proposal and send
+	// generate block proposal
+	/*
+	b.Cond.L.Lock()
+	defer b.Cond.L.Unlock()
+	for b.fin.HighestRound() < p.Round-1 {
+		log.Lvl1("blockmaker: waiting highest round go to ", p.Round-1)
+		b.Cond.Wait()
+	}
+	newRound := p.Round
+	oldBlock, err := b.fin.HighestChainHead(newRound - 1)
+	if err != nil {
+		fmt.Println(b.fin.notarized)
+		panic(err)
+	}
+	//blob := []byte(fmt.Sprintf("block data round %d owner %d", p.Round, b.c.Index))
+	blob := make([]byte, b.c.BlockSize)
+	rand.Read(blob)
+
+	hash := rootHash(blob)
+	header := BlockHeader{
+		Round:      newRound,
+		Owner:      b.c.Index - b.c.BeaconNb,
+		Root:       hash,
+		Randomness: p.Randomness,
+		PrvHash:    oldBlock.Block.BlockHeader.Hash(),
+		PrvSig:     oldBlock.Notarization.Signature,
+	}
+	blockProposal := &BlockProposal{
+		BlockHeader: header,
+		Blob:        blob,
+	}
+	*/
 
 	// start round loop which will periodically check round end conditions
 	//go n.roundLoop(round)

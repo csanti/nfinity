@@ -18,9 +18,10 @@ func init() {
 // Dfinity service is either a beacon a notarizer or a block maker
 type Nfinity struct {
 	*onet.ServiceProcessor
-	context *onet.Context
-	c       *Config
-	node    *Node
+	context 	*onet.Context
+	c       	*Config
+	node    	*Node
+	blockChain 	*BlockChain
 }
 
 // NewDfinityService
@@ -39,9 +40,13 @@ func (n *Nfinity) SetConfig(c *Config) {
 	n.node = NewNodeProcess(n.context, c, n.broadcast)
 }
 
-
 func (n *Nfinity) AttachCallback(fn func(int)) {
 	// attach to something.. haha lol xd
+	if n.node != nil {
+		n.node.AttachCallback(fn)	
+	} else {
+		log.Lvl1("Could not attach callback, node is nil")
+	}
 }
 
 
