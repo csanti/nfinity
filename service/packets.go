@@ -13,12 +13,14 @@ func init() {
 }
 
 type BlockProposal struct {
+	TrackId int
 	Block
 	Count int // count of parital signatures in the array
 	Signatures []PartialSignature // Partial signature from the signer
 }
 
 type PartialSignature struct {
+	Signer int
 	Partial []byte
 }
 

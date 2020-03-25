@@ -25,4 +25,5 @@ type Config struct {
 	Threshold int             // threshold of the threshold sharing scheme
 	BlockSize int             // the size of the block in bytes
 	BlockTime int             // blocktime in seconds
+	GossipTime int
 }

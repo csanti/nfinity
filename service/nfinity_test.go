@@ -36,6 +36,7 @@ func TestNfinity(t *testing.T) {
 			Roster: roster,
 			Index: i,
 			N: n,
+			GossipTime: 1000,
 		}
 		nfinities[i] = servers[i].Service(Name).(*Nfinity)
 		nfinities[i].SetConfig(c)
