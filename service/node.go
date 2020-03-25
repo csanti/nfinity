@@ -140,9 +140,11 @@ func (n *Node) NewRound(round int) {
 func (n *Node) ReceivedBlockProposal(p *BlockProposal) {
 	log.Lvl2("Processing new block proposal")
 
-	n.chain.Append(&p.Block)
-
-	//n.NewRound(p.Block.BlockHeader.Round+1)
+	n.chain.Append(&p.Block, false)
+	if (n.callback != nil) {
+		n.callback(n.chain.Length())	
+	}	
+	n.NewRound(p.Block.BlockHeader.Round+1)
 
 	//if p.Block.Round < n.round {
 	//	log.Lvl2("received too old block")
@@ -165,7 +167,7 @@ func (n *Node) ReceivedBlockProposal(p *BlockProposal) {
 func (n *Node) ReceivedBootstrap(b *Bootstrap) {
 	log.Lvl2("Processing bootstrap message")
 
-	n.chain.Append(&b.Block)
+	log.Lvl1(n.chain.Append(&b.Block, true))
 
 	n.NewRound(0)
 }

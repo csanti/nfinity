@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"sync"
+	//"go.dedis.ch/onet/log"
 )
 
 type BlockChain struct {
@@ -32,17 +33,20 @@ type Block struct {
 }
 
 // Appends add a new block to the head of the chain
-func (bc *BlockChain) Append(b *Block) {
+func (bc *BlockChain) Append(b *Block, isGenesis bool) int {
 	bc.Lock()
 	defer bc.Unlock()
 	// we can not append a block that does not point to he latest block
-	if bc.length > 0 && b.BlockHeader.PrvHash != bc.last.BlockHeader.Hash() {
+	/*
+	if !isGenesis && bc.length > 0 && b.BlockHeader.PrvHash != bc.last.BlockHeader.Hash() {
 		panic("that should never happen")
 	}
+	*/
 	bc.last = b
 	bc.length++
 
 	bc.all = append(bc.all, b)
+	return bc.length
 }
 
 // length returns the length of the finalized chain
