@@ -56,7 +56,7 @@ func (n *Node) StartConsensus() {
 	log.Lvl1("Staring consensus")
 	n.isGenesis = true
 	packet := &Bootstrap{
-		Block: GenesisBlock,
+		Block: n.chain.CreateGenesis(),
 		Seed:  1234,
 	}
 	log.Lvl2("Starting consensus, sending bootstrap..")
@@ -107,7 +107,7 @@ func (n *Node) NewRound(round int) {
 	blob := make([]byte, n.c.BlockSize)
 	rand.Read(blob)
 	hash := rootHash(blob)
-	header := BlockHeader {
+	header := &BlockHeader {
 		Round:      round,
 		Owner:      n.c.Index,
 		Root:       hash,
@@ -115,7 +115,7 @@ func (n *Node) NewRound(round int) {
 		PrvHash:    oldBlock.BlockHeader.Hash(),
 		PrvSig:     oldBlock.BlockHeader.Signature,
 	}
-	blockProposal := Block {
+	blockProposal := &Block {
 		BlockHeader: header,
 		Blob:        blob,
 	}
@@ -129,19 +129,34 @@ func (n *Node) NewRound(round int) {
 }
 
 func (n *Node) ReceivedBlockProposal(p *BlockProposal) {
-	if p.Block.Round < n.round {
-		log.Lvl2("received too old block")
+	blockRound := p.Block.BlockHeader.Round
+	if blockRound < n.round {
+		log.Lvl3("received too old block")
 		return
 	}
-	blockRound := p.Block.BlockHeader.Round
+	_, exists := n.rounds[blockRound]
+	if (!exists) {
+		log.Lvlf2("BPrecv, Round storage for round %d does not exist", blockRound)
+		return
+	}
+	// we should do these checks in round sotrage processing, because here
+	// it can happen that we receive blocks from future round, and we still dont know who is the proposer
+	/*
 	if (p.Block.BlockHeader.Owner != n.rounds[blockRound].ProposerIndex) {
 		log.Lvl2("received block with invalid proposer")
 		return
 	}
+	*/
 	// TODO check owner signature
 	// is from valid proposer, we have to check if already received a block from him.
 	if (!n.rounds[blockRound].ReceivedValidBlock) {
-		n.rounds[blockRound].StoreValidBlock(&p.Block)		
+		n.rounds[blockRound].StoreValidBlock(p.Block)	
+		//provisional
+		n.rounds[blockRound].Sigs[n.c.Index] = &PartialSignature {
+			Signer: n.c.Index,
+			Partial: []byte("signature"),
+		}	
+		n.rounds[blockRound].SigCount++
 	} else if (p.Block.BlockHeader.Hash() != n.rounds[blockRound].BlockHash) {
 		log.Lvl1("Received two different blocks from proposer!")
 		// TODO handle malicious case
@@ -153,7 +168,7 @@ func (n *Node) ReceivedBlockProposal(p *BlockProposal) {
 func (n *Node) ReceivedBootstrap(b *Bootstrap) {
 	log.Lvl3("Processing bootstrap message... starting consensus")
 	// add genesis and start new round
-	if(n.chain.Append(&b.Block, true) != 1) {
+	if(n.chain.Append(b.Block, true) != 1) {
 		panic("this should never happen")
 	}
 	n.NewRound(0)
@@ -165,31 +180,52 @@ func (n *Node) roundLoop(round int) {
 	defer func() {
 		log.Lvlf3("Exiting round %d loop",round)
 		n.NewRound(round+1)
+		if n.callback != nil {
+			n.callback(round)
+		}
 		delete(n.rounds, round)
 	}()
+	//n.Cond.L.Lock()
+	//defer n.Cond.L.Unlock()
+
 	var times int = 0
 	for {
 		// wait block time to receive messages
 		time.Sleep(time.Duration(n.c.GossipTime) * time.Millisecond)
-
+		_, exists := n.rounds[round]
+		if !exists {
+			log.Lvlf2("Round storage for round %d does not exist", round)
+			continue
+		}
 		// wait on new inputs
 		//n.Cond.Wait()
 
-		if times == 3 {
+		if times == 10 { // max
 			return
 		}
-		n.rounds[round].ProcessBlockProposals()
-
 		times++
-		// iterate received proposals
-			// use trackid to only check last iteration from each source
-		//
 
+		// this is why we need cond.wait....
+		if !n.rounds[round].ReceivedValidBlock {
+			continue
+		}
 
+		combinedSigs, haveNewSigs := n.rounds[round].ProcessBlockProposals()
+		if !haveNewSigs {
+			// we dont have new info to send
+			//return
+		}
+		// send new block proposal with newly collected signatures
+		block := n.rounds[round].Block
+		iteration := n.rounds[round].SentBlockProposals
+		newBp := n.generateBlockProposal(block,combinedSigs,iteration)
+		go n.broadcast(n.c.Roster.List, newBp)
 
+		// check round finish conditions
+		if n.rounds[round].SigCount >= n.c.Threshold {
+			return
+		}
 	}
-	// check round finish conditions
-		//append block to finalized blockchain
 
 	return
 	/*
@@ -205,8 +241,14 @@ func (n *Node) roundLoop(round int) {
 // generates round randomness as a byte array based on a given seed
 func (n *Node) generateRoundRandomness(seed int) []byte {
 	rHash := Suite.Hash()
-	binary.Write(rHash, binary.BigEndian, seed + 1) //TODO for testing... must change
+	//log.Lvl1(rHash)
+	err := binary.Write(rHash, binary.BigEndian, uint32(seed + 1)) //TODO for testing... must change
+	if err != nil {
+		log.Lvl1("Error writing to hash buffer")
+	}
+	//log.Lvl1(rHash)
 	buff := rHash.Sum(nil)
+	//log.Lvl1(buff)
 	return buff
 } 
 
@@ -218,4 +260,19 @@ func rootHash(data []byte) string {
 	h := sha256.New()
 	h.Write(data)
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+func (n *Node) generateBlockProposal(block *Block, sigs []*PartialSignature, iteration int) *BlockProposal {
+	trackId := n.c.Index * 10 + iteration
+	bp := &BlockProposal {
+		Block: block,
+		TrackId: trackId,
+	}
+	if (sigs != nil) {
+		bp.Signatures = sigs
+		bp.Count = len(sigs)
+	} else {
+		log.Lvl2("Generating BP without signatures")
+	}
+	return bp
 }

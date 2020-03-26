@@ -28,7 +28,7 @@ type BlockHeader struct {
 // Block represents how a block is stored locally
 // Block is first sent from a block maker
 type Block struct {
-	BlockHeader
+	*BlockHeader
 	Blob []byte // the actual content
 }
 
@@ -75,9 +75,9 @@ func (h *BlockHeader) Hash() string {
 	return hex.EncodeToString(buff)
 }
 
-// GenesisBlock is the first block of the chain
-var GenesisBlock = Block{
-	BlockHeader: BlockHeader{
+//
+func (bc *BlockChain) CreateGenesis() *Block {
+	header := &BlockHeader {
 		Round: 0,
 		Owner: -1,
 		Root:  "6afbc27f4ae8951a541be53038ca20d3a9f18f60a38b1dc2cd48a46ff5d26ace",
@@ -86,6 +86,9 @@ var GenesisBlock = Block{
 		// echo "hello world" | sha256sum | sha256sum
 		PrvSig: []byte("3605ff73b6faec27aa78e311603e9fe2ef35bad82ccf46fc707814bfbdcc6f9e"),
 		Signature: []byte("6585ff73b6faec27aa78e311603e9fe2ef35bad82ccf46fc707814bfbdcc6f9e"),
-	},
-	Blob: []byte("Hello Genesis"),
+	}
+	return &Block{
+		BlockHeader: header,
+		Blob: []byte("Hello Genesis"),
+	}
 }

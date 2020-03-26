@@ -14,9 +14,9 @@ func init() {
 
 type BlockProposal struct {
 	TrackId int
-	Block
+	*Block
 	Count int // count of parital signatures in the array
-	Signatures []PartialSignature // Partial signature from the signer
+	Signatures []*PartialSignature // Partial signature from the signer
 }
 
 type PartialSignature struct {
@@ -25,6 +25,6 @@ type PartialSignature struct {
 }
 
 type Bootstrap struct {
-	Block
+	*Block
 	Seed int
 }
