@@ -167,8 +167,12 @@ func (n *Node) ReceivedBlockProposal(p *BlockProposal) {
 }
 
 func (n *Node) ReceivedNotarizedBlock(nb *NotarizedBlock) {
-	log.Lvl1("Received Notarized Block")
 	// check if rs exists
+	if (nb.Round < n.round) {
+		log.Lvl3("received too old notarized block")
+		return
+	}
+	log.Lvl1("Received Notarized Block")
 	if n.rounds[nb.Round] == nil {
 		n.rounds[nb.Round] = NewRoundStorage(n.c, nb.Round)
 	}
@@ -196,8 +200,8 @@ func (n *Node) roundLoop(round int) {
 		}
 		delete(n.rounds, round)
 	}()
-	//n.Cond.L.Lock()
-	//defer n.Cond.L.Unlock()
+	n.Cond.L.Lock()
+	defer n.Cond.L.Unlock()
 
 	var times int = 0
 	for {
@@ -217,7 +221,7 @@ func (n *Node) roundLoop(round int) {
 		}
 
 		// wait on new inputs
-		//n.Cond.Wait()
+		n.Cond.Wait()
 
 		if times == 4 { // max
 			log.Lvl1("Reached max round loops!!")
