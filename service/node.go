@@ -73,7 +73,9 @@ func (n *Node) Process(e *network.Envelope) {
 		case *BlockProposal:
 			n.ReceivedBlockProposal(inner)
 		case *Bootstrap:			
-			n.ReceivedBootstrap(inner)			
+			n.ReceivedBootstrap(inner)
+		case *NotarizedBlock:
+			n.ReceivedNotarizedBlock(inner)
 		default:
 			log.Lvl2("Received unidentified message")
 	}
@@ -84,12 +86,15 @@ func (n *Node) NewRound(round int) {
 	n.round = round
 	// generate round randomness (sha256 - 32 bytes size)
 	roundRandomness := n.generateRoundRandomness(round) // should change... seed should be based on prev block sign
-	log.Lvlf2("%d - Round randomness: %s",n.c.Index, hex.EncodeToString(roundRandomness))
+	log.Lvlf3("%d - Round randomness: %s",n.c.Index, hex.EncodeToString(roundRandomness))
 	// create the round storage
-	n.rounds[round] = NewRoundStorage(round, binary.BigEndian.Uint32(roundRandomness))
+	if (n.rounds[round] == nil) {
+		n.rounds[round] = NewRoundStorage(n.c, round)
+	}
+	n.rounds[round].Randomness = binary.BigEndian.Uint32(roundRandomness)
 	// pick block proposer
 	proposerPosition := n.pickBlockProposer(binary.BigEndian.Uint32(roundRandomness), n.c.N)
-	log.Lvlf2("Block proposer picked - position %d of %d", proposerPosition, n.c.N)
+	log.Lvlf3("Block proposer picked - position %d of %d", proposerPosition, n.c.N)
 	n.rounds[round].ProposerIndex = proposerPosition
 	
 	// start round loop which will periodically check round end conditions
@@ -97,7 +102,7 @@ func (n *Node) NewRound(round int) {
 
 	// check if node is proposer, if not: returns
 	if (proposerPosition == n.c.Index) {
-		log.Lvlf2("%d - I am block proposer for round %d !", n.c.Index, round)
+		log.Lvlf1("%d - I am block proposer for round %d !", n.c.Index, round)
 	} else {
 		return
 	}
@@ -119,13 +124,17 @@ func (n *Node) NewRound(round int) {
 		BlockHeader: header,
 		Blob:        blob,
 	}
+	n.rounds[round].StoreValidBlock(blockProposal)
+	n.rounds[round].SignBlock(n.c.Index)
+	n.rounds[round].ReceivedValidBlock = true
+	sigs, _ := n.rounds[round].ProcessBlockProposals()
 	packet := &BlockProposal {
 		Block: blockProposal,
-		// need to add the proposer signature to the array
+		Signatures: sigs,
+		Count: 1,
 	}
 	log.Lvlf3("Broadcasting block proposal for round %d", round)
 	go n.broadcast(n.c.Roster.List, packet)
-	n.ReceivedBlockProposal(packet)
 }
 
 func (n *Node) ReceivedBlockProposal(p *BlockProposal) {
@@ -136,27 +145,19 @@ func (n *Node) ReceivedBlockProposal(p *BlockProposal) {
 	}
 	_, exists := n.rounds[blockRound]
 	if (!exists) {
-		log.Lvlf2("BPrecv, Round storage for round %d does not exist", blockRound)
-		return
+		log.Lvlf2("%d - BPrecv, Round storage for round %d does not exist", n.c.Index, blockRound)
+		n.rounds[blockRound] = NewRoundStorage(n.c, blockRound)
 	}
-	// we should do these checks in round sotrage processing, because here
-	// it can happen that we receive blocks from future round, and we still dont know who is the proposer
-	/*
-	if (p.Block.BlockHeader.Owner != n.rounds[blockRound].ProposerIndex) {
-		log.Lvl2("received block with invalid proposer")
-		return
-	}
-	*/
-	// TODO check owner signature
+
 	// is from valid proposer, we have to check if already received a block from him.
 	if (!n.rounds[blockRound].ReceivedValidBlock) {
-		n.rounds[blockRound].StoreValidBlock(p.Block)	
-		//provisional
-		n.rounds[blockRound].Sigs[n.c.Index] = &PartialSignature {
-			Signer: n.c.Index,
-			Partial: []byte("signature"),
-		}	
-		n.rounds[blockRound].SigCount++
+		// TODO check owner signature and valid proposer
+		if (p.Block.BlockHeader.Owner != n.rounds[blockRound].ProposerIndex) {
+			log.Lvl2("received block with invalid proposer")
+			return
+		}
+		n.rounds[blockRound].StoreValidBlock(p.Block)
+		n.rounds[blockRound].SignBlock(n.c.Index)
 	} else if (p.Block.BlockHeader.Hash() != n.rounds[blockRound].BlockHash) {
 		log.Lvl1("Received two different blocks from proposer!")
 		// TODO handle malicious case
@@ -165,8 +166,18 @@ func (n *Node) ReceivedBlockProposal(p *BlockProposal) {
 	n.rounds[blockRound].StoreBlockProposal(p)
 }
 
+func (n *Node) ReceivedNotarizedBlock(nb *NotarizedBlock) {
+	log.Lvl1("Received Notarized Block")
+	// check if rs exists
+	if n.rounds[nb.Round] == nil {
+		n.rounds[nb.Round] = NewRoundStorage(n.c, nb.Round)
+	}
+	n.rounds[nb.Round].Finalized = true
+	n.rounds[nb.Round].FinalSig = nb.Signature
+}
+
 func (n *Node) ReceivedBootstrap(b *Bootstrap) {
-	log.Lvl3("Processing bootstrap message... starting consensus")
+	log.Lvl2("Processing bootstrap message... starting consensus")
 	// add genesis and start new round
 	if(n.chain.Append(b.Block, true) != 1) {
 		panic("this should never happen")
@@ -192,16 +203,25 @@ func (n *Node) roundLoop(round int) {
 	for {
 		// wait block time to receive messages
 		time.Sleep(time.Duration(n.c.GossipTime) * time.Millisecond)
+
 		_, exists := n.rounds[round]
 		if !exists {
 			log.Lvlf2("Round storage for round %d does not exist", round)
 			continue
 		}
+
+		if n.rounds[round].Finalized {
+			log.Lvl3("Exiting round loop, is finalized")
+			// we received notarized block
+			return
+		}
+
 		// wait on new inputs
 		//n.Cond.Wait()
 
-		if times == 10 { // max
-			return
+		if times == 4 { // max
+			log.Lvl1("Reached max round loops!!")
+			//return
 		}
 		times++
 
@@ -213,18 +233,23 @@ func (n *Node) roundLoop(round int) {
 		combinedSigs, haveNewSigs := n.rounds[round].ProcessBlockProposals()
 		if !haveNewSigs {
 			// we dont have new info to send
-			//return
+			return
 		}
+		// check round finish conditions
+		if n.rounds[round].SigCount >= n.c.Threshold {
+			// enugh signatures, we need to recover sig and send
+			log.Lvlf1("We have enough signatures for round %d", round)
+			n.rounds[round].Finalized = true
+			n.rounds[round].FinalSig = []byte("final sig")
+			go n.broadcast(n.c.Roster.List, n.generateNotarizedBlock())
+			return
+		}		
+		// we dont have enough signatures
 		// send new block proposal with newly collected signatures
 		block := n.rounds[round].Block
 		iteration := n.rounds[round].SentBlockProposals
 		newBp := n.generateBlockProposal(block,combinedSigs,iteration)
 		go n.broadcast(n.c.Roster.List, newBp)
-
-		// check round finish conditions
-		if n.rounds[round].SigCount >= n.c.Threshold {
-			return
-		}
 	}
 
 	return
@@ -275,4 +300,11 @@ func (n *Node) generateBlockProposal(block *Block, sigs []*PartialSignature, ite
 		log.Lvl2("Generating BP without signatures")
 	}
 	return bp
+}
+
+func (n *Node) generateNotarizedBlock() *NotarizedBlock {
+	nb := &NotarizedBlock {
+
+	}
+	return nb
 }

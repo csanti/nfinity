@@ -33,6 +33,7 @@ func NewNfinityService(c *onet.Context) (onet.Service, error) {
 	c.RegisterProcessor(n, ConfigType)
 	c.RegisterProcessor(n, BootstrapType)
 	c.RegisterProcessor(n, BlockProposalType)
+	c.RegisterProcessor(n, NotarizedBlockType)
 	return n, nil
 }
 
@@ -69,6 +70,10 @@ func (n *Nfinity) Process(e *network.Envelope) {
 		n.node.Process(e)
 	case *BlockProposal:
 		n.node.Process(e)
+	case *NotarizedBlock:
+		n.node.Process(e)
+	default:
+		log.Lvl1("Received unidentified message")
 	}
 }
 

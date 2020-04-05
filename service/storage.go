@@ -2,9 +2,12 @@ package service
 
 import (
 	"go.dedis.ch/onet/log"
+	"go.dedis.ch/kyber/share"
+	"go.dedis.ch/kyber/sign/tbls"
 )
 
 type RoundStorage struct {
+	c *Config
 	Round int
 	Randomness uint32
 	ProposerIndex int
@@ -19,16 +22,17 @@ type RoundStorage struct {
 	SentBlockProposals int
 	StoredBlockProposals int
 	TmpBlockProposals map[int]*BlockProposal
-	//pub       *share.PubPoly
+	pub *share.PubPoly
 }
 
 
-func NewRoundStorage(round int, randomness uint32) *RoundStorage {
+func NewRoundStorage(c *Config, round int) *RoundStorage {
 	return &RoundStorage {
+		c: c,
 		Round: round,
-		Randomness: randomness,
 		Sigs: make(map[int]*PartialSignature),
 		TmpBlockProposals: make(map[int]*BlockProposal),
+		pub: share.NewPubPoly(G2, G2.Point().Base(), c.Public),
 	}
 }
 
@@ -67,8 +71,18 @@ func (rs *RoundStorage) StoreBlockProposal(p *BlockProposal) {
 func (rs *RoundStorage) ProcessBlockProposals() ([]*PartialSignature, bool) {
 	initialSigCount := rs.SigCount
 	for _ , bp := range rs.TmpBlockProposals {
+		// TODO check validity of block proposal
+		if (bp.Block.BlockHeader.Owner != rs.ProposerIndex) {
+			log.Lvl2("received block with invalid proposer")
+			continue
+		}
 		for _, ps := range bp.Signatures {
-			rs.Sigs[ps.Signer] = ps
+			// we can make this more efficient if everytime we check if we have enough signatures to finish
+			// so we dont add unnecessary sigs
+			err := rs.AddPartialSig(ps)
+			if err != nil {
+				log.Lvl1("Error validating partial signature")
+			}
 		}
 	}
 	rs.SigCount = len(rs.Sigs)
@@ -80,6 +94,69 @@ func (rs *RoundStorage) ProcessBlockProposals() ([]*PartialSignature, bool) {
 	} else {
 		return sigsArray, false
 	}
+}
+
+
+// AddPartialSig appends a new tbls signature to the list of already received signature
+// for this block. It returns an error if the signature is invalid.
+func (rs *RoundStorage) AddPartialSig(p *PartialSignature) error {
+
+	err := tbls.Verify(Suite, rs.pub, []byte(rs.Block.BlockHeader.Hash()), p.Partial)
+	if err != nil {
+		return err
+	}
+
+	i, err := tbls.SigShare(p.Partial).Index()
+	if err != nil {
+		return err
+	}
+
+	rs.Sigs[i] = p
+	rs.SigCount++
+
+	/* WE CAN DO THIS WHEN WE HAVE ENOUGH SIGNATURES
+	// not enough yet signature to get the notarized block ready
+	if len(b.sigs) < b.c.Threshold {
+		return nil, nil
+	}
+
+	arr := make([][]byte, 0, b.c.Threshold)
+	for _, val := range b.sigs {
+		arr = append(arr, val)
+	}
+
+	hash := b.block.BlockHeader.Hash()
+	signature, err := tbls.Recover(Suite, b.pub, []byte(hash), arr, b.c.Threshold, b.c.N)
+	if err != nil {
+		return nil, err
+	}
+	b.notarized = true
+	return &NotarizedBlock{
+		Block: b.block,
+		Notarization: &Notarization{
+			Hash:      hash,
+			Signature: signature,
+		},
+	}, nil
+	*/
+	return nil
+
+}
+
+
+// Sign block creates the partial signature and adds it to the round storage
+func (rs *RoundStorage) SignBlock(index int) *PartialSignature {
+	sig, err := tbls.Sign(Suite, rs.c.Share, []byte(rs.Block.BlockHeader.Hash()))
+	if err != nil {
+		panic("this should not happen")
+	}
+	ps := &PartialSignature {
+		Signer: index,
+		Partial: sig,
+	}
+	rs.Sigs[index] = ps
+	rs.SigCount++
+	return ps
 }
 
 func (rs *RoundStorage) mapToArray(m map[int]*PartialSignature) []*PartialSignature {

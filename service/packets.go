@@ -6,10 +6,12 @@ import (
 
 var BlockProposalType network.MessageTypeID
 var BootstrapType network.MessageTypeID
+var NotarizedBlockType network.MessageTypeID
 
 func init() {
 	BlockProposalType = network.RegisterMessage(&BlockProposal{})
 	BootstrapType = network.RegisterMessage(&Bootstrap{})
+	NotarizedBlockType = network.RegisterMessage(&NotarizedBlock{})
 }
 
 type BlockProposal struct {
@@ -22,6 +24,12 @@ type BlockProposal struct {
 type PartialSignature struct {
 	Signer int
 	Partial []byte
+}
+
+type NotarizedBlock struct {
+	Round int
+	Hash string
+	Signature []byte
 }
 
 type Bootstrap struct {
