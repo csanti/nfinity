@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"go.dedis.ch/onet/log"
 	"go.dedis.ch/kyber/share"
 	"go.dedis.ch/kyber/sign/tbls"
@@ -157,6 +158,31 @@ func (rs *RoundStorage) SignBlock(index int) *PartialSignature {
 	rs.Sigs[index] = ps
 	rs.SigCount++
 	return ps
+}
+
+func (rs *RoundStorage) NotarizeBlock() (*NotarizedBlock, error) {
+		// not enough yet signature to get the notarized block ready
+	if rs.SigCount < rs.c.Threshold {
+		return nil, errors.New("not enough signatures")
+	}
+
+	arr := make([][]byte, 0, rs.c.Threshold)
+	for _, val := range rs.Sigs {
+		arr = append(arr, val.Partial)
+	}
+
+	hash := rs.Block.BlockHeader.Hash()
+	signature, err := tbls.Recover(Suite, rs.pub, []byte(hash), arr, rs.c.Threshold, rs.c.N)
+	if err != nil {
+		return nil, err
+	}
+	rs.Finalized = true
+	rs.FinalSig = signature
+	return &NotarizedBlock {
+		Round: rs.Round,
+		Hash: hash,
+		Signature: signature,
+	}, nil
 }
 
 func (rs *RoundStorage) mapToArray(m map[int]*PartialSignature) []*PartialSignature {

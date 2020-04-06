@@ -176,6 +176,7 @@ func (n *Node) ReceivedNotarizedBlock(nb *NotarizedBlock) {
 	if n.rounds[nb.Round] == nil {
 		n.rounds[nb.Round] = NewRoundStorage(n.c, nb.Round)
 	}
+	// TODO check final signature
 	n.rounds[nb.Round].Finalized = true
 	n.rounds[nb.Round].FinalSig = nb.Signature
 }
@@ -198,6 +199,7 @@ func (n *Node) roundLoop(round int) {
 		if n.callback != nil {
 			n.callback(round)
 		}
+		// TODO append notarized block to the blockchain
 		delete(n.rounds, round)
 	}()
 	n.Cond.L.Lock()
@@ -243,9 +245,12 @@ func (n *Node) roundLoop(round int) {
 		if n.rounds[round].SigCount >= n.c.Threshold {
 			// enugh signatures, we need to recover sig and send
 			log.Lvlf1("We have enough signatures for round %d", round)
-			n.rounds[round].Finalized = true
-			n.rounds[round].FinalSig = []byte("final sig")
-			go n.broadcast(n.c.Roster.List, n.generateNotarizedBlock())
+			nb, err := n.rounds[round].NotarizeBlock()
+			if err != nil {
+				log.Lvlf1("Error generateing notarized block: %s", err)
+				continue
+			}
+			go n.broadcast(n.c.Roster.List, nb)
 			return
 		}		
 		// we dont have enough signatures
@@ -257,14 +262,6 @@ func (n *Node) roundLoop(round int) {
 	}
 
 	return
-	/*
-	n.chain.Append(&p.Block, false)
-	if (n.callback != nil) {
-		n.callback(n.chain.Length())	
-	}	
-	n.NewRound(p.Block.BlockHeader.Round+1)
-	*/
-
 }
 
 // generates round randomness as a byte array based on a given seed
@@ -304,11 +301,4 @@ func (n *Node) generateBlockProposal(block *Block, sigs []*PartialSignature, ite
 		log.Lvl2("Generating BP without signatures")
 	}
 	return bp
-}
-
-func (n *Node) generateNotarizedBlock() *NotarizedBlock {
-	nb := &NotarizedBlock {
-
-	}
-	return nb
 }
