@@ -89,7 +89,7 @@ func (rs *RoundStorage) ProcessBlockProposals() ([]*PartialSignature, bool) {
 	rs.SigCount = len(rs.Sigs)
 	// TODO i could save one map conversion if i save the array in memory and use it again when there is no info change
 	sigsArray := rs.mapToArray(rs.Sigs)
-	log.Lvlf2("Finished processing block proposals - sign count = %d (%d new)",rs.SigCount, rs.SigCount - initialSigCount)
+	log.Lvlf3("Finished processing block proposals - sign count = %d (%d new)",rs.SigCount, rs.SigCount - initialSigCount)
 	if (rs.SigCount - initialSigCount) > 0 {
 		return sigsArray, true
 	} else {
@@ -115,33 +115,7 @@ func (rs *RoundStorage) AddPartialSig(p *PartialSignature) error {
 	rs.Sigs[i] = p
 	rs.SigCount++
 
-	/* WE CAN DO THIS WHEN WE HAVE ENOUGH SIGNATURES
-	// not enough yet signature to get the notarized block ready
-	if len(b.sigs) < b.c.Threshold {
-		return nil, nil
-	}
-
-	arr := make([][]byte, 0, b.c.Threshold)
-	for _, val := range b.sigs {
-		arr = append(arr, val)
-	}
-
-	hash := b.block.BlockHeader.Hash()
-	signature, err := tbls.Recover(Suite, b.pub, []byte(hash), arr, b.c.Threshold, b.c.N)
-	if err != nil {
-		return nil, err
-	}
-	b.notarized = true
-	return &NotarizedBlock{
-		Block: b.block,
-		Notarization: &Notarization{
-			Hash:      hash,
-			Signature: signature,
-		},
-	}, nil
-	*/
 	return nil
-
 }
 
 

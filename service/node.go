@@ -172,7 +172,7 @@ func (n *Node) ReceivedNotarizedBlock(nb *NotarizedBlock) {
 		log.Lvl3("received too old notarized block")
 		return
 	}
-	log.Lvl1("Received Notarized Block")
+	log.Lvl2("Received Notarized Block")
 	if n.rounds[nb.Round] == nil {
 		n.rounds[nb.Round] = NewRoundStorage(n.c, nb.Round)
 	}
@@ -247,7 +247,7 @@ func (n *Node) roundLoop(round int) {
 			log.Lvlf1("We have enough signatures for round %d", round)
 			nb, err := n.rounds[round].NotarizeBlock()
 			if err != nil {
-				log.Lvlf1("Error generateing notarized block: %s", err)
+				log.Lvlf1("Error generating notarized block: %s", err)
 				continue
 			}
 			go n.broadcast(n.c.Roster.List, nb)

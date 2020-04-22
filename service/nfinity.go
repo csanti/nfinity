@@ -77,6 +77,20 @@ func (n *Nfinity) Process(e *network.Envelope) {
 	}
 }
 
+func (n *Nfinity) getRandomPeers(numPeers int) []*network.ServerIdentity {
+	var results []*network.ServerIdentity
+	for i := 0; i < numPeers {
+		posPeer := n.c.Roster.RandomServerIdentity()
+		if n.ServerIdentity().Equal(posPeer) {
+			// selected itself
+			continue
+		}
+		results = append(posPeer, results)
+		i++
+	}
+	return results
+}
+
 type BroadcastFn func(sis []*network.ServerIdentity, msg interface{})
 
 func (n *Nfinity) broadcast(sis []*network.ServerIdentity, msg interface{}) {
@@ -90,4 +104,11 @@ func (n *Nfinity) broadcast(sis []*network.ServerIdentity, msg interface{}) {
 			//panic(err)
 		}
 	}
+}
+
+func (n *Nfinity) gossip(sis []*network.ServerIdentity, msg interface{}) {
+
+	log.Lvl1("Gossiping")
+
+	
 }
