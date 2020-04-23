@@ -2,6 +2,7 @@ package service
 
 import (
 	"testing"
+	"time"
 
 	"go.dedis.ch/onet"
 	"go.dedis.ch/onet/log"
@@ -30,9 +31,9 @@ func TestNfinity(t *testing.T) {
 	test := onet.NewTCPTest(suite)
 	defer test.CloseAll()
 
-	n := 6
+	n := 15
 	servers, roster, _ := test.GenTree(n, true)
-	shares, public := dkg(3, 6)
+	shares, public := dkg(8, 15)
 	_, commits := public.Info()
 	nfinities := make([]*Nfinity, n)
 	for i := 0; i < n; i++ {
@@ -40,8 +41,10 @@ func TestNfinity(t *testing.T) {
 			Roster: roster,
 			Index: i,
 			N: n,
-			Threshold: 4,
-			GossipTime: 1000,
+			Threshold: 8,
+			CommunicationMode: 1,
+			GossipTime: 100,
+			GossipPeers: 3,
 			Public: commits,
 			Share: shares[i], // i have to check this..
 		}
@@ -57,6 +60,7 @@ func TestNfinity(t *testing.T) {
 	}
 	
 	nfinities[0].AttachCallback(cb)
+	time.Sleep(time.Duration(1)*time.Second)
 	go nfinities[0].Start()
 	<-done
 	log.Lvl1("finish")

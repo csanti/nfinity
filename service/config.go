@@ -26,4 +26,6 @@ type Config struct {
 	BlockSize int             // the size of the block in bytes
 	BlockTime int             // blocktime in seconds
 	GossipTime int
+	GossipPeers int 		// number of neighbours that each node will gossip messages to
+	CommunicationMode int  	// 0 for broadcast, 1 for gossip
 }

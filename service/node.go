@@ -31,9 +31,10 @@ type Node struct {
 	isGenesis bool
 
 	broadcast BroadcastFn
+	gossip BroadcastFn
 }
 
-func NewNodeProcess(c *onet.Context, conf *Config, b BroadcastFn) *Node {
+func NewNodeProcess(c *onet.Context, conf *Config, b BroadcastFn, g BroadcastFn) *Node {
 	// need to create chain first
 	chain := new(BlockChain)
 	n := &Node {
@@ -42,6 +43,7 @@ func NewNodeProcess(c *onet.Context, conf *Config, b BroadcastFn) *Node {
 		chain: chain,
 		c:     conf,
     	broadcast: b,
+    	gossip: g,
     	rounds: make(map[int]*RoundStorage),
 	}
 	return n
@@ -134,7 +136,7 @@ func (n *Node) NewRound(round int) {
 		Count: 1,
 	}
 	log.Lvlf3("Broadcasting block proposal for round %d", round)
-	go n.broadcast(n.c.Roster.List, packet)
+	go n.gossip(n.c.Roster.List, packet)
 }
 
 func (n *Node) ReceivedBlockProposal(p *BlockProposal) {
@@ -149,20 +151,7 @@ func (n *Node) ReceivedBlockProposal(p *BlockProposal) {
 		n.rounds[blockRound] = NewRoundStorage(n.c, blockRound)
 	}
 
-	// is from valid proposer, we have to check if already received a block from him.
-	if (!n.rounds[blockRound].ReceivedValidBlock) {
-		// TODO check owner signature and valid proposer
-		if (p.Block.BlockHeader.Owner != n.rounds[blockRound].ProposerIndex) {
-			log.Lvl2("received block with invalid proposer")
-			return
-		}
-		n.rounds[blockRound].StoreValidBlock(p.Block)
-		n.rounds[blockRound].SignBlock(n.c.Index)
-	} else if (p.Block.BlockHeader.Hash() != n.rounds[blockRound].BlockHash) {
-		log.Lvl1("Received two different blocks from proposer!")
-		// TODO handle malicious case
-		return
-	}
+	// we store all received block proposal received, they will be checked and processed on roundloop
 	n.rounds[blockRound].StoreBlockProposal(p)
 }
 
@@ -172,13 +161,19 @@ func (n *Node) ReceivedNotarizedBlock(nb *NotarizedBlock) {
 		log.Lvl3("received too old notarized block")
 		return
 	}
-	log.Lvl2("Received Notarized Block")
-	if n.rounds[nb.Round] == nil {
-		n.rounds[nb.Round] = NewRoundStorage(n.c, nb.Round)
+	if n.rounds[nb.Round].Finalized {
+		return
 	}
-	// TODO check final signature
-	n.rounds[nb.Round].Finalized = true
-	n.rounds[nb.Round].FinalSig = nb.Signature
+	log.Lvl2("Received Notarized Block for round ", nb.Round)
+	// we can finalize all previous blocks
+	for i := n.round; i <= nb.Round; i++ {
+		if n.rounds[i] == nil {
+			n.rounds[i] = NewRoundStorage(n.c, i)
+		}
+		n.rounds[i].Finalized = true
+		n.rounds[i].FinalSig = nb.Signature
+	}
+	go n.gossip(n.c.Roster.List, nb)
 }
 
 func (n *Node) ReceivedBootstrap(b *Bootstrap) {
@@ -194,7 +189,7 @@ func (n *Node) roundLoop(round int) {
 	log.Lvlf3("Starting round %d loop",round)
 	// 
 	defer func() {
-		log.Lvlf3("Exiting round %d loop",round)
+		log.Lvlf3("%d - Exiting round %d loop",n.c.Index,round)
 		n.NewRound(round+1)
 		if n.callback != nil {
 			n.callback(round)
@@ -207,7 +202,6 @@ func (n *Node) roundLoop(round int) {
 
 	var times int = 0
 	for {
-		// wait block time to receive messages
 		time.Sleep(time.Duration(n.c.GossipTime) * time.Millisecond)
 
 		_, exists := n.rounds[round]
@@ -222,25 +216,37 @@ func (n *Node) roundLoop(round int) {
 			return
 		}
 
-		// wait on new inputs
-		n.Cond.Wait()
-
 		if times == 4 { // max
 			log.Lvl1("Reached max round loops!!")
 			//return
 		}
-		times++
+		
+		// keep waiting for a valid block
+		/*
+		for !n.rounds[round].ReceivedValidBlock {
+			log.Lvlf1("n:%d r: %d - Waiting 1", n.c.Index, round)
+			n.Cond.Wait()
+		}
+		*/
 
-		// this is why we need cond.wait....
-		if !n.rounds[round].ReceivedValidBlock {
-			continue
+		var combinedSigs []*PartialSignature
+		var haveNewSigs bool
+		for {
+			if n.rounds[round].Finalized {
+				// round is finished
+				// we should check the validity of notarized block
+				return
+			}
+			combinedSigs, haveNewSigs = n.rounds[round].ProcessBlockProposals()
+			if !haveNewSigs {
+				// we dont have new info to send
+				log.Lvlf3("n:%d r: %d - Waiting 2", n.c.Index, round)
+				n.Cond.Wait()	
+			} else {
+				break
+			}
 		}
 
-		combinedSigs, haveNewSigs := n.rounds[round].ProcessBlockProposals()
-		if !haveNewSigs {
-			// we dont have new info to send
-			return
-		}
 		// check round finish conditions
 		if n.rounds[round].SigCount >= n.c.Threshold {
 			// enugh signatures, we need to recover sig and send
@@ -250,18 +256,18 @@ func (n *Node) roundLoop(round int) {
 				log.Lvlf1("Error generating notarized block: %s", err)
 				continue
 			}
-			go n.broadcast(n.c.Roster.List, nb)
+			go n.gossip(n.c.Roster.List, nb)
 			return
 		}		
+		log.Lvlf2("n:%d r: %d - Gossiping new bp", n.c.Index, round)
 		// we dont have enough signatures
 		// send new block proposal with newly collected signatures
 		block := n.rounds[round].Block
 		iteration := n.rounds[round].SentBlockProposals
 		newBp := n.generateBlockProposal(block,combinedSigs,iteration)
-		go n.broadcast(n.c.Roster.List, newBp)
+		go n.gossip(n.c.Roster.List, newBp)
+		times++
 	}
-
-	return
 }
 
 // generates round randomness as a byte array based on a given seed

@@ -39,7 +39,13 @@ func NewNfinityService(c *onet.Context) (onet.Service, error) {
 
 func (n *Nfinity) SetConfig(c *Config) {
 	n.c = c
-	n.node = NewNodeProcess(n.context, c, n.broadcast)
+	if n.c.CommunicationMode == 0 {
+		n.node = NewNodeProcess(n.context, c, n.broadcast, n.gossip)
+	} else if n.c.CommunicationMode == 1 {
+		n.node = NewNodeProcess(n.context, c, n.broadcast, n.gossip)	
+	} else {
+		panic("Invalid communication mode")
+	}	
 }
 
 func (n *Nfinity) AttachCallback(fn func(int)) {
@@ -77,15 +83,16 @@ func (n *Nfinity) Process(e *network.Envelope) {
 	}
 }
 
+// depreciated
 func (n *Nfinity) getRandomPeers(numPeers int) []*network.ServerIdentity {
 	var results []*network.ServerIdentity
-	for i := 0; i < numPeers {
+	for i := 0; i < numPeers; {
 		posPeer := n.c.Roster.RandomServerIdentity()
 		if n.ServerIdentity().Equal(posPeer) {
 			// selected itself
 			continue
 		}
-		results = append(posPeer, results)
+		results = append(results, posPeer)
 		i++
 	}
 	return results
@@ -98,7 +105,7 @@ func (n *Nfinity) broadcast(sis []*network.ServerIdentity, msg interface{}) {
 		if n.ServerIdentity().Equal(si) {
 			continue
 		}
-		log.Lvlf3("Broadcasting from: %s to: %s",n.ServerIdentity(), si)
+		log.Lvlf4("Broadcasting from: %s to: %s",n.ServerIdentity(), si)
 		if err := n.ServiceProcessor.SendRaw(si, msg); err != nil {
 			log.Lvl1("Error sending message")
 			//panic(err)
@@ -107,8 +114,14 @@ func (n *Nfinity) broadcast(sis []*network.ServerIdentity, msg interface{}) {
 }
 
 func (n *Nfinity) gossip(sis []*network.ServerIdentity, msg interface{}) {
-
-	log.Lvl1("Gossiping")
-
+	//targets := n.getRandomPeers(n.c.GossipPeers)
+	targets := n.c.Roster.RandomSubset(n.ServerIdentity(), n.c.GossipPeers).List
+	for k, target := range targets {
+		if k == 0 {continue}
+		log.Lvlf4("Gossiping from: %s to: %s",n.ServerIdentity(), target)
+		if err := n.ServiceProcessor.SendRaw(target, msg); err != nil {
+			log.Lvl1("Error sending message")
+		}
+	}
 	
 }

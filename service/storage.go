@@ -74,7 +74,16 @@ func (rs *RoundStorage) ProcessBlockProposals() ([]*PartialSignature, bool) {
 	for _ , bp := range rs.TmpBlockProposals {
 		// TODO check validity of block proposal
 		if (bp.Block.BlockHeader.Owner != rs.ProposerIndex) {
-			log.Lvl2("received block with invalid proposer")
+			log.Lvl1("received block with invalid proposer")
+			continue
+		}
+		if !rs.ReceivedValidBlock {
+			// first valid block we process, we store it and sign it
+			rs.StoreValidBlock(bp.Block)
+			rs.SignBlock(rs.c.Index)
+		}
+		if bp.Block.BlockHeader.Hash() != rs.BlockHash {
+			log.Lvl1("received two different blocks from valid proposer")
 			continue
 		}
 		for _, ps := range bp.Signatures {
@@ -89,14 +98,13 @@ func (rs *RoundStorage) ProcessBlockProposals() ([]*PartialSignature, bool) {
 	rs.SigCount = len(rs.Sigs)
 	// TODO i could save one map conversion if i save the array in memory and use it again when there is no info change
 	sigsArray := rs.mapToArray(rs.Sigs)
-	log.Lvlf3("Finished processing block proposals - sign count = %d (%d new)",rs.SigCount, rs.SigCount - initialSigCount)
 	if (rs.SigCount - initialSigCount) > 0 {
+		log.Lvlf2("n:%d r:%d - Finished processing block proposals - sign count = %d (%d new)",rs.c.Index, rs.Round, rs.SigCount, rs.SigCount - initialSigCount)
 		return sigsArray, true
 	} else {
 		return sigsArray, false
 	}
 }
-
 
 // AddPartialSig appends a new tbls signature to the list of already received signature
 // for this block. It returns an error if the signature is invalid.
