@@ -47,6 +47,7 @@ func TestNfinity(t *testing.T) {
 			GossipPeers: 3,
 			Public: commits,
 			Share: shares[i], // i have to check this..
+			BlockSize: 10000000,
 		}
 		nfinities[i] = servers[i].Service(Name).(*Nfinity)
 		nfinities[i].SetConfig(c)

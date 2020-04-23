@@ -135,6 +135,7 @@ func (n *Node) NewRound(round int) {
 		Signatures: sigs,
 		Count: 1,
 	}
+	log.Lvl1("Sending block of size ",len(packet.Block.Blob))
 	log.Lvlf3("Broadcasting block proposal for round %d", round)
 	go n.gossip(n.c.Roster.List, packet)
 }
@@ -161,7 +162,7 @@ func (n *Node) ReceivedNotarizedBlock(nb *NotarizedBlock) {
 		log.Lvl3("received too old notarized block")
 		return
 	}
-	if n.rounds[nb.Round].Finalized {
+	if n.rounds[nb.Round] != nil && n.rounds[nb.Round].Finalized {
 		return
 	}
 	log.Lvl2("Received Notarized Block for round ", nb.Round)
