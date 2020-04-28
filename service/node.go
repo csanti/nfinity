@@ -8,9 +8,9 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 
-	"go.dedis.ch/onet"
-	"go.dedis.ch/onet/log"
-	"go.dedis.ch/onet/network"
+	"github.com/csanti/onet"
+	"github.com/csanti/onet/log"
+	"github.com/csanti/onet/network"
 )
 
 type Node struct {
@@ -190,6 +190,9 @@ func (n *Node) roundLoop(round int) {
 	log.Lvlf3("Starting round %d loop",round)
 	// 
 	defer func() {
+		if n.isGenesis {
+			log.Lvlf1("Round %d finished",round)
+		}
 		log.Lvlf3("%d - Exiting round %d loop",n.c.Index,round)
 		n.NewRound(round+1)
 		if n.callback != nil {
@@ -217,8 +220,8 @@ func (n *Node) roundLoop(round int) {
 			return
 		}
 
-		if times == 4 { // max
-			log.Lvl1("Reached max round loops!!")
+		if times > n.c.MaxRoundLoops { // max
+			log.Lvlf1("Node %d Reached max round loops!!", n.c.Index)
 			//return
 		}
 		
@@ -251,7 +254,7 @@ func (n *Node) roundLoop(round int) {
 		// check round finish conditions
 		if n.rounds[round].SigCount >= n.c.Threshold {
 			// enugh signatures, we need to recover sig and send
-			log.Lvlf1("We have enough signatures for round %d", round)
+			log.Lvlf2("We have enough signatures for round %d", round)
 			nb, err := n.rounds[round].NotarizeBlock()
 			if err != nil {
 				log.Lvlf1("Error generating notarized block: %s", err)

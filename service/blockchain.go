@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"sync"
-	//"go.dedis.ch/onet/log"
+	//"github.com/csanti/onet/log"
 )
 
 type BlockChain struct {

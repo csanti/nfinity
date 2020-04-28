@@ -2,7 +2,7 @@ package service
 
 import (
 	"errors"
-	"go.dedis.ch/onet/log"
+	"github.com/csanti/onet/log"
 	"go.dedis.ch/kyber/share"
 	"go.dedis.ch/kyber/sign/tbls"
 )

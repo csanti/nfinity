@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"go.dedis.ch/onet"
-	"go.dedis.ch/onet/log"
+	"github.com/csanti/onet"
+	"github.com/csanti/onet/log"
 	"go.dedis.ch/kyber"
 	"go.dedis.ch/kyber/pairing"
 	"go.dedis.ch/kyber/share"
@@ -44,10 +44,11 @@ func TestNfinity(t *testing.T) {
 			Threshold: 8,
 			CommunicationMode: 1,
 			GossipTime: 100,
-			GossipPeers: 3,
+			GossipPeers: 4,
 			Public: commits,
 			Share: shares[i], // i have to check this..
 			BlockSize: 10000000,
+			MaxRoundLoops: 4,
 		}
 		nfinities[i] = servers[i].Service(Name).(*Nfinity)
 		nfinities[i].SetConfig(c)
