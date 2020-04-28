@@ -100,7 +100,6 @@ func (s *Simulation) Run(config *onet.SimulationConfig) error {
 	}
 
 	nfinity.AttachCallback(newRoundCb)
-	time.Sleep(time.Duration(1)*time.Second)
 	fullTime := monitor.NewTimeMeasure("finalizing")
 	fullRound = monitor.NewTimeMeasure("fullRound")
 	nfinity.Start()
