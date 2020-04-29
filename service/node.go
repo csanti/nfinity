@@ -84,6 +84,9 @@ func (n *Node) Process(e *network.Envelope) {
 }
 
 func (n *Node) NewRound(round int) {
+	if round > n.c.RoundsToSimulate + 1 {
+		return
+	}
 	// new round can only be called after previous round is finished, so this is safe
 	n.round = round
 	// generate round randomness (sha256 - 32 bytes size)
@@ -263,12 +266,16 @@ func (n *Node) roundLoop(round int) {
 			go n.gossip(n.c.Roster.List, nb)
 			return
 		}		
-		log.Lvlf2("n:%d r: %d - Gossiping new bp", n.c.Index, round)
+		log.Lvlf3("n:%d r: %d - Gossiping new bp", n.c.Index, round)
 		// we dont have enough signatures
 		// send new block proposal with newly collected signatures
 		block := n.rounds[round].Block
 		iteration := n.rounds[round].SentBlockProposals
 		newBp := n.generateBlockProposal(block,combinedSigs,iteration)
+		if times > 0 {
+			// each node only full block one time
+			newBp.Block.Blob = []byte("hi")
+		}
 		go n.gossip(n.c.Roster.List, newBp)
 		times++
 	}

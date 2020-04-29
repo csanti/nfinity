@@ -27,4 +27,5 @@ type Config struct {
 	GossipPeers int 		// number of neighbours that each node will gossip messages to
 	CommunicationMode int  	// 0 for broadcast, 1 for gossip
 	MaxRoundLoops int // maximum times a node can loop on a round before alerting
+	RoundsToSimulate int
 }

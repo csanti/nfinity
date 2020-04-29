@@ -67,6 +67,7 @@ func (s *Simulation) DistributeConfig(config *onet.SimulationConfig) {
 			Share: shares[i], 
 			BlockSize: s.BlockSize,
 			MaxRoundLoops: s.MaxRoundLoops,
+			RoundsToSimulate: s.Rounds,
 		}
 		if i == 0 {
 			config.GetService(nfinity.Name).(*nfinity.Nfinity).SetConfig(c)
@@ -109,8 +110,12 @@ func (s *Simulation) Run(config *onet.SimulationConfig) error {
 	}
 	fullTime.Record()
 	monitor.RecordSingleMeasure("blocks", float64(roundDone))
+	monitor.RecordSingleMeasure("avgRound", fullTime.Wall.Value / float64(s.Rounds))
 	log.Lvl1(" ---------------------------")
 	log.Lvl1("End of simulation => ", roundDone, " rounds done")
+	log.Lvl1("Last full round = ",fullRound.Wall.Value)
+	log.Lvl1("Total time = ", fullTime.Wall.Value)
+	log.Lvl1("Avg round = ", fullTime.Wall.Value / float64(s.Rounds))
 	log.Lvl1(" ---------------------------")
 	return nil
 }

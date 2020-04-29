@@ -31,9 +31,9 @@ func TestNfinity(t *testing.T) {
 	test := onet.NewTCPTest(suite)
 	defer test.CloseAll()
 
-	n := 15
+	n := 10
 	servers, roster, _ := test.GenTree(n, true)
-	shares, public := dkg(8, 15)
+	shares, public := dkg(5, 10)
 	_, commits := public.Info()
 	nfinities := make([]*Nfinity, n)
 	for i := 0; i < n; i++ {
@@ -41,14 +41,15 @@ func TestNfinity(t *testing.T) {
 			Roster: roster,
 			Index: i,
 			N: n,
-			Threshold: 8,
+			Threshold: 5,
 			CommunicationMode: 1,
-			GossipTime: 100,
-			GossipPeers: 4,
+			GossipTime: 1000,
+			GossipPeers: 3,
 			Public: commits,
 			Share: shares[i], // i have to check this..
 			BlockSize: 10000000,
 			MaxRoundLoops: 4,
+			RoundsToSimulate: 10,
 		}
 		nfinities[i] = servers[i].Service(Name).(*Nfinity)
 		nfinities[i].SetConfig(c)

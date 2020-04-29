@@ -47,8 +47,9 @@ func (rs *RoundStorage) StoreValidBlock(b *Block) {
 // also deletetes previous block proposal iterations from the sender
 func (rs *RoundStorage) StoreBlockProposal(p *BlockProposal) {
 	rs.ReceivedBlockProposals++
-	source := int(p.TrackId / 10)
+	//source := int(p.TrackId / 10)
 
+	/*
 	// check if a newer iteration from the same sender was previously received
 	for i := p.TrackId; i < source*10 + 10; i++ {
 		_, exists := rs.TmpBlockProposals[p.TrackId]
@@ -65,6 +66,7 @@ func (rs *RoundStorage) StoreBlockProposal(p *BlockProposal) {
 			rs.StoredBlockProposals--
 		}
 	}
+	*/
 	rs.StoredBlockProposals++
 	rs.TmpBlockProposals[p.TrackId] = p
 }
@@ -97,9 +99,12 @@ func (rs *RoundStorage) ProcessBlockProposals() ([]*PartialSignature, bool) {
 	}
 	rs.SigCount = len(rs.Sigs)
 	// TODO i could save one map conversion if i save the array in memory and use it again when there is no info change
-	sigsArray := rs.mapToArray(rs.Sigs)
+
+	var sigsArray []*PartialSignature
+	
 	if (rs.SigCount - initialSigCount) > 0 {
 		log.Lvlf2("n:%d r:%d - Finished processing block proposals - sign count = %d (%d new)",rs.c.Index, rs.Round, rs.SigCount, rs.SigCount - initialSigCount)
+		sigsArray = rs.mapToArray(rs.Sigs)
 		return sigsArray, true
 	} else {
 		return sigsArray, false
