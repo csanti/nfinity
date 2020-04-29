@@ -43,7 +43,7 @@ func TestNfinity(t *testing.T) {
 			N: n,
 			Threshold: 5,
 			CommunicationMode: 1,
-			GossipTime: 1000,
+			GossipTime: 150,
 			GossipPeers: 3,
 			Public: commits,
 			Share: shares[i], // i have to check this..

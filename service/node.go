@@ -202,7 +202,7 @@ func (n *Node) roundLoop(round int) {
 			n.callback(round)
 		}
 		// TODO append notarized block to the blockchain
-		delete(n.rounds, round)
+		//delete(n.rounds, round)
 	}()
 	n.Cond.L.Lock()
 	defer n.Cond.L.Unlock()

@@ -101,7 +101,7 @@ func (rs *RoundStorage) ProcessBlockProposals() ([]*PartialSignature, bool) {
 	// TODO i could save one map conversion if i save the array in memory and use it again when there is no info change
 
 	var sigsArray []*PartialSignature
-	
+
 	if (rs.SigCount - initialSigCount) > 0 {
 		log.Lvlf2("n:%d r:%d - Finished processing block proposals - sign count = %d (%d new)",rs.c.Index, rs.Round, rs.SigCount, rs.SigCount - initialSigCount)
 		sigsArray = rs.mapToArray(rs.Sigs)
@@ -115,12 +115,15 @@ func (rs *RoundStorage) ProcessBlockProposals() ([]*PartialSignature, bool) {
 // for this block. It returns an error if the signature is invalid.
 func (rs *RoundStorage) AddPartialSig(p *PartialSignature) error {
 
-	err := tbls.Verify(Suite, rs.pub, []byte(rs.Block.BlockHeader.Hash()), p.Partial)
+	i, err := tbls.SigShare(p.Partial).Index()
 	if err != nil {
 		return err
 	}
+	if rs.Sigs[i] != nil {
+		return nil
+	}
 
-	i, err := tbls.SigShare(p.Partial).Index()
+	err = tbls.Verify(Suite, rs.pub, []byte(rs.Block.BlockHeader.Hash()), p.Partial)
 	if err != nil {
 		return err
 	}
