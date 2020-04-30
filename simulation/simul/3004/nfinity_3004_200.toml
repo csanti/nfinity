@@ -1,0 +1,21 @@
+Simulation = "nfinity"
+Servers = 10
+Rounds = 10
+Hosts = 200
+Bf = 199
+Threshold = 134
+RunWait = "6000s"
+GossipPeers = 8
+Suite = "bn256.G2"
+Seed = 123456789
+CommunicationMode = 1
+Gossiptime = 150
+MaxRoundLoops = 9999
+Bandwidth = 50
+Delay = 50
+
+BlockSize
+250000
+500000
+1000000
+2000000
