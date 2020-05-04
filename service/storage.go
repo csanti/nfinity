@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"time"
 	"github.com/csanti/onet/log"
 	"go.dedis.ch/kyber/share"
 	"go.dedis.ch/kyber/sign/tbls"
@@ -137,7 +138,14 @@ func (rs *RoundStorage) AddPartialSig(p *PartialSignature) error {
 
 // Sign block creates the partial signature and adds it to the round storage
 func (rs *RoundStorage) SignBlock(index int) *PartialSignature {
+	start := time.Now()
 	sig, err := tbls.Sign(Suite, rs.c.Share, []byte(rs.Block.BlockHeader.Hash()))
+	elapsed := time.Since(start)
+	if rs.c.Index == 1 {
+		log.Lvl1("********************************************")
+		log.Lvl1("Signing time = ", elapsed)
+		log.Lvl1("********************************************")
+	}
 	if err != nil {
 		panic("this should not happen")
 	}
@@ -152,6 +160,7 @@ func (rs *RoundStorage) SignBlock(index int) *PartialSignature {
 
 func (rs *RoundStorage) NotarizeBlock() (*NotarizedBlock, error) {
 		// not enough yet signature to get the notarized block ready
+	start := time.Now()
 	if rs.SigCount < rs.c.Threshold {
 		return nil, errors.New("not enough signatures")
 	}
@@ -165,6 +174,12 @@ func (rs *RoundStorage) NotarizeBlock() (*NotarizedBlock, error) {
 	signature, err := tbls.Recover(Suite, rs.pub, []byte(hash), arr, rs.c.Threshold, rs.c.N)
 	if err != nil {
 		return nil, err
+	}
+	elapsed := time.Since(start)
+	if rs.c.Index == 1 {
+		log.Lvl1("********************************************")
+		log.Lvl1("NotarizeBlock elapsed time = ", elapsed, rs.c.Threshold)
+		log.Lvl1("********************************************")
 	}
 	rs.Finalized = true
 	rs.FinalSig = signature
