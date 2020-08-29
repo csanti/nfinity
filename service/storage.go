@@ -84,11 +84,11 @@ func (rs *RoundStorage) ProcessBlockProposals() ([]*PartialSignature, bool) {
 			// first valid block we process, we store it and sign it
 			rs.StoreValidBlock(bp.Block)
 			rs.SignBlock(rs.c.Index)
-		}
+		}/*
 		if bp.Block.BlockHeader.Hash() != rs.BlockHash {
 			log.Lvl1("received two different blocks from valid proposer")
 			continue
-		}
+		}*/
 		for _, ps := range bp.Signatures {
 			// we can make this more efficient if everytime we check if we have enough signatures to finish
 			// so we dont add unnecessary sigs
@@ -96,9 +96,11 @@ func (rs *RoundStorage) ProcessBlockProposals() ([]*PartialSignature, bool) {
 			if err != nil {
 				log.Lvl1("Error validating partial signature")
 			}
+			if rs.SigCount >= rs.c.Threshold {
+				break
+			}
 		}
 	}
-	rs.SigCount = len(rs.Sigs)
 	// TODO i could save one map conversion if i save the array in memory and use it again when there is no info change
 
 	var sigsArray []*PartialSignature
@@ -124,7 +126,7 @@ func (rs *RoundStorage) AddPartialSig(p *PartialSignature) error {
 		return nil
 	}
 
-	err = tbls.Verify(Suite, rs.pub, []byte(rs.Block.BlockHeader.Hash()), p.Partial)
+	err = tbls.Verify(Suite, rs.pub, []byte(rs.BlockHash), p.Partial)
 	if err != nil {
 		return err
 	}
@@ -138,14 +140,7 @@ func (rs *RoundStorage) AddPartialSig(p *PartialSignature) error {
 
 // Sign block creates the partial signature and adds it to the round storage
 func (rs *RoundStorage) SignBlock(index int) *PartialSignature {
-	start := time.Now()
-	sig, err := tbls.Sign(Suite, rs.c.Share, []byte(rs.Block.BlockHeader.Hash()))
-	elapsed := time.Since(start)
-	if rs.c.Index == 1 {
-		log.Lvl1("********************************************")
-		log.Lvl1("Signing time = ", elapsed)
-		log.Lvl1("********************************************")
-	}
+	sig, err := tbls.Sign(Suite, rs.c.Share, []byte(rs.BlockHash))
 	if err != nil {
 		panic("this should not happen")
 	}
@@ -159,8 +154,6 @@ func (rs *RoundStorage) SignBlock(index int) *PartialSignature {
 }
 
 func (rs *RoundStorage) NotarizeBlock() (*NotarizedBlock, error) {
-		// not enough yet signature to get the notarized block ready
-	start := time.Now()
 	if rs.SigCount < rs.c.Threshold {
 		return nil, errors.New("not enough signatures")
 	}
@@ -169,9 +162,10 @@ func (rs *RoundStorage) NotarizeBlock() (*NotarizedBlock, error) {
 	for _, val := range rs.Sigs {
 		arr = append(arr, val.Partial)
 	}
-
-	hash := rs.Block.BlockHeader.Hash()
-	signature, err := tbls.Recover(Suite, rs.pub, []byte(hash), arr, rs.c.Threshold, rs.c.N)
+	start := time.Now()
+	hash := rs.BlockHash
+	//signature, err := tbls.Recover(Suite, rs.pub, []byte(hash), arr, rs.c.Threshold, rs.c.N)
+	signature, err := Recover(rs.pub, []byte(hash), arr, rs.c.Threshold, rs.c.N)
 	if err != nil {
 		return nil, err
 	}
@@ -196,5 +190,36 @@ func (rs *RoundStorage) mapToArray(m map[int]*PartialSignature) []*PartialSignat
 		array = append(array,p)
 	}
 	return array
+}
+
+func Recover(public *share.PubPoly, msg []byte, sigs [][]byte, t, n int) ([]byte, error) {
+	pubShares := make([]*share.PubShare, 0)
+	for _, sig := range sigs {
+		s := tbls.SigShare(sig)
+		i, err := s.Index()
+		if err != nil {
+			return nil, err
+		}
+		//if err = bls.Verify(suite, public.Eval(i).V, msg, s.Value()); err != nil {
+		//	return nil, err
+		//}
+		point := Suite.G1().Point()
+		if err := point.UnmarshalBinary(s.Value()); err != nil {
+			return nil, err
+		}
+		pubShares = append(pubShares, &share.PubShare{I: i, V: point})
+		if len(pubShares) >= t {
+			break
+		}
+	}
+	commit, err := share.RecoverCommit(Suite.G1(), pubShares, t, n)
+	if err != nil {
+		return nil, err
+	}
+	sig, err := commit.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	return sig, nil
 }
 

@@ -13,3 +13,4 @@ external/js/.nyc_output
 external/js/dist
 external/js/output.log
 *.DS_Store
+*.log
